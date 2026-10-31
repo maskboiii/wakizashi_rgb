@@ -1,0 +1,5 @@
+PyQt6>=6.5
+hidapi>=0.14
+mss>=9.0
+SoundCard>=0.4.6
+numpy>=1.24
