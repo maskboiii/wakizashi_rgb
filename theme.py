@@ -238,6 +238,31 @@ QPushButton:pressed {
 """)
 
 
+_KEY_SELECTED = Template("""
+QPushButton {
+  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 $key_top, stop:0.52 $key_mid, stop:1 $key_bot);
+  border: 2px solid $accent;
+  border-bottom: 3px solid $accent_dim;
+  border-radius: 6px;
+  color: $accent;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0px 0px 1px 0px;
+}
+QPushButton:hover {
+  border-color: $accent_hi;
+  border-bottom-color: $accent;
+  color: $text;
+}
+QPushButton:pressed {
+  background-color: $key_bot;
+  border-bottom-width: 2px;
+  padding-top: 1px;
+  color: $accent;
+}
+""")
+
+
 def _keycap_fg(r, g, b):
     """Readable label colour for a key painted with an arbitrary RGB value."""
     def channel(v):
@@ -250,6 +275,11 @@ def _keycap_fg(r, g, b):
 
 def keycap_base_qss(tokens):
     return _KEY_BASE.substitute(**tokens)
+
+
+def keycap_selected_qss(tokens):
+    """Neutral keycap with an accent outline: selection must not imply colour."""
+    return _KEY_SELECTED.substitute(**tokens)
 
 
 def keycap_qss(tokens, r, g, b, selected=False):

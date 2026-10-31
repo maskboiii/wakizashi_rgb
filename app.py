@@ -43,7 +43,8 @@ from PyQt6.QtWidgets import (
 )
 
 import kb
-from theme import DARK, LIGHT, build_qss, keycap_base_qss, keycap_qss, swatch_qss
+from theme import (DARK, LIGHT, build_qss, keycap_base_qss, keycap_qss,
+                   keycap_selected_qss, swatch_qss)
 from widgets import (
     AuroraBackground,
     GlassPanel,
@@ -1589,7 +1590,7 @@ class MainWindow(QMainWindow):
             r, g, b = self.painted[name]
             return keycap_qss(self._tokens, r, g, b, selected)
         if selected:
-            return keycap_qss(self._tokens, 34, 158, 255, True)
+            return keycap_selected_qss(self._tokens)
         return keycap_base_qss(self._tokens)
 
     def _apply_style(self, name):
