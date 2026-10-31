@@ -23,6 +23,8 @@ from PyQt6.QtWidgets import (
     QColorDialog,
     QComboBox,
     QDialog,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -30,10 +32,11 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRubberBand,
+    QScrollArea,
     QSlider,
     QSpinBox,
+    QStackedWidget,
     QSystemTrayIcon,
-    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -69,12 +72,14 @@ def _new_grabber():
 # --------------------------------------------------------------------------
 # Layout constants
 # --------------------------------------------------------------------------
-WINDOW_W = 800          # width of the keyboard canvas / main window
-HEADER_H = 42          # slim brand / status strip above the keyboard
+WINDOW_W = 1210         # main window width
+WINDOW_H = 770          # main window height
+KEYBOARD_W = 800        # fixed width of the keyboard canvas
 KEYBOARD_H = 300        # height of the keyboard canvas
-TABS_H = 280           # default height for the tab widget
-STATUS_H = 28           # status strip below the tabs
-WINDOW_H = HEADER_H + KEYBOARD_H + TABS_H + STATUS_H
+HEADER_H = 48           # slim brand / status strip above the workspace
+DOCK_H = 52             # canvas hint + bulk actions strip
+STATUS_H = 30           # status strip at the bottom
+RAIL_W = 348            # fixed width of the control rail
 X_OFFSET = 42            # horizontal centering shift for the key grid
 
 # Application-wide stylesheet, key styles and design tokens now live in
@@ -708,145 +713,331 @@ class MainWindow(QMainWindow):
         self.header = HeaderBar(self._tokens, self.aurora)
         outer.addWidget(self.header)
 
-        self.background = KeyboardCanvas(self._tokens, self.aurora)
-        self.background.setFixedSize(WINDOW_W, KEYBOARD_H)
+        body = QWidget(self.aurora)
+        body_layout = QHBoxLayout(body)
+        body_layout.setContentsMargins(16, 12, 16, 12)
+        body_layout.setSpacing(12)
+        outer.addWidget(body, 1)
+
+        stage = QWidget(body)
+        stage_layout = QVBoxLayout(stage)
+        stage_layout.setContentsMargins(0, 0, 0, 0)
+        stage_layout.setSpacing(12)
+
+        hero = QHBoxLayout()
+        hero.setContentsMargins(0, 0, 0, 0)
+        hero.addStretch(1)
+        self.background = KeyboardCanvas(self._tokens, stage)
+        self.background.setFixedSize(KEYBOARD_W, KEYBOARD_H)
         self.background.installEventFilter(self)
         self._rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self.background)
-        outer.addWidget(self.background)
+        hero.addWidget(self.background)
+        hero.addStretch(1)
+        stage_layout.addLayout(hero)
 
-        self.tabs = QTabWidget()
-        self.tabs.setMinimumWidth(WINDOW_W)
-        self.tabs.setMinimumHeight(TABS_H)
-        self.settings_btn = QPushButton("Настройки")
-        self.settings_btn.setToolTip("Настройки")
-        self.settings_btn.setFixedHeight(28)
-        self.settings_btn.clicked.connect(self._open_settings)
-        self.tabs.setCornerWidget(self.settings_btn)
-        outer.addWidget(self.tabs, 1)
+        self._build_presets_panel(stage)
+        stage_layout.addWidget(self.presets_panel)
+
+        self._build_stats_panel(stage)
+        stage_layout.addWidget(self.stats_panel)
+        stage_layout.addStretch(1)
+
+        self._build_dock(stage)
+        stage_layout.addWidget(self.dock)
+        body_layout.addWidget(stage, 1)
+
+        self._build_side_rail(body)
+        body_layout.addWidget(self.rail, 0)
 
         self.status_text = "поиск устройства..."
-        self._build_paint_tab()
-        self._build_effects_tab()
-
         self.status_label = StatusBar(self._tokens, self.status_text, self.aurora)
         self.status_label.setFixedHeight(STATUS_H)
         outer.addWidget(self.status_label)
 
         self._build_keys()
+        self._update_stats()
+        self.mode_buttons[0].setFocus()
+
+    # -- Layout helpers --------------------------------------------------
+    def _update_stats(self):
+        if not hasattr(self, "stat_painted"):
+            return
+        self.stat_painted.setText(str(len(self.painted)))
+        self.stat_selected.setText(str(len(self.selected)))
+        self.stat_effect.setText(self.effect_combo.currentText())
+
+    def _group_title(self, text):
+        label = QLabel(text)
+        label.setObjectName("GroupTitle")
+        return label
+
+    def _divider(self):
+        line = QFrame()
+        line.setObjectName("Divider")
+        line.setFixedHeight(1)
+        return line
+
+    def _scroll_page(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.viewport().setAutoFillBackground(False)
+        inner = QWidget()
+        inner.setAutoFillBackground(False)
+        layout = QVBoxLayout(inner)
+        layout.setContentsMargins(0, 0, 6, 0)
+        layout.setSpacing(10)
+        scroll.setWidget(inner)
+        return scroll, layout
+
+    def _build_presets_panel(self, parent):
+        self.presets_panel = GlassPanel(self._tokens, 14, parent)
+        layout = QVBoxLayout(self.presets_panel)
+        layout.setContentsMargins(16, 12, 16, 14)
+        layout.setSpacing(10)
+        layout.addWidget(self._group_title("ИГРОВЫЕ ПРЕСЕТЫ"))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        for i, name in enumerate(GAME_PRESETS):
+            btn = QPushButton(name)
+            btn.setObjectName("Preset")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(f"Применить пресет «{name}»")
+            btn.clicked.connect(lambda _checked=False, n=name: self._apply_game_preset(n))
+            grid.addWidget(btn, i // 5, i % 5)
+        layout.addLayout(grid)
+
+    def _build_stats_panel(self, parent):
+        self.stats_panel = GlassPanel(self._tokens, 14, parent)
+        self.stats_panel.setFixedHeight(66)
+        layout = QHBoxLayout(self.stats_panel)
+        layout.setContentsMargins(18, 10, 18, 10)
+        layout.setSpacing(24)
+
+        def block(caption, value, object_name):
+            box = QVBoxLayout()
+            box.setSpacing(0)
+            val = QLabel(value)
+            val.setObjectName(object_name)
+            cap = QLabel(caption)
+            cap.setObjectName("GroupTitle")
+            box.addWidget(val)
+            box.addWidget(cap)
+            layout.addLayout(box)
+            return val
+
+        self.stat_painted = block("ПОКРАШЕНО", "0", "StatValue")
+        layout.addWidget(self._vdivider())
+        self.stat_selected = block("ВЫДЕЛЕНО", "0", "StatValue")
+        layout.addWidget(self._vdivider())
+        self.stat_effect = block("АКТИВНЫЙ ЭФФЕКТ", "—", "StatText")
+        layout.addStretch(1)
+
+    def _vdivider(self):
+        line = QFrame()
+        line.setObjectName("VDivider")
+        line.setFixedWidth(1)
+        return line
+
+    def _build_dock(self, parent):
+        self.dock = GlassPanel(self._tokens, 12, parent)
+        self.dock.setFixedHeight(DOCK_H)
+        layout = QHBoxLayout(self.dock)
+        layout.setContentsMargins(16, 8, 16, 8)
+        layout.setSpacing(10)
+        hint = QLabel("ЛКМ — покрасить · ПКМ — очистить · «Выделение» — рамка и пакетная заливка")
+        hint.setStyleSheet(f"color: {self._tokens['text_muted']}; font-size: 11px;")
+        layout.addWidget(hint, 1)
+        clear = QPushButton("Очистить всё")
+        clear.clicked.connect(self._clear_all)
+        layout.addWidget(clear)
+        rescan = QPushButton("Пересканировать")
+        rescan.setToolTip("Повторный поиск клавиатуры по USB")
+        rescan.clicked.connect(self._rescan)
+        layout.addWidget(rescan)
+
+    def _build_side_rail(self, parent):
+        self.rail = GlassPanel(self._tokens, 16, parent)
+        self.rail.setFixedWidth(RAIL_W)
+        layout = QVBoxLayout(self.rail)
+        layout.setContentsMargins(14, 14, 14, 14)
+        layout.setSpacing(10)
+
+        seg = QHBoxLayout()
+        seg.setSpacing(4)
+        self.mode_buttons = []
+        for index, label in enumerate(("Покраска", "Эффекты")):
+            btn = QPushButton(label)
+            btn.setObjectName("SegMode")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _checked=False, i=index: self._set_mode(i))
+            seg.addWidget(btn, 1)
+            self.mode_buttons.append(btn)
+        layout.addLayout(seg)
+        layout.addWidget(self._divider())
+
+        self.mode_stack = QStackedWidget()
+        self._build_paint_tab()
+        self._build_effects_tab()
+        layout.addWidget(self.mode_stack, 1)
+
+        layout.addWidget(self._divider())
+        self.settings_btn = QPushButton("Настройки")
+        self.settings_btn.setToolTip("Настройки приложения")
+        self.settings_btn.clicked.connect(self._open_settings)
+        layout.addWidget(self.settings_btn)
+
+        self._set_mode(0)
+
+    def _set_mode(self, index):
+        for i, btn in enumerate(self.mode_buttons):
+            btn.setChecked(i == index)
+        self.mode_stack.setCurrentIndex(index)
 
     def _swatch_style(self, r, g, b, active=False):
         return swatch_qss(r, g, b, active, self._tokens["accent"])
 
     def _build_paint_tab(self):
-        tab = QWidget()
-        v = QVBoxLayout(tab)
-        v.setContentsMargins(8, 6, 8, 6)
+        page, v = self._scroll_page()
+        v.addWidget(self._group_title("ЦВЕТ"))
 
-        row1 = QHBoxLayout()
-        row1.setSpacing(6)
+        armed = QHBoxLayout()
+        armed.setSpacing(10)
         self.swatch = QLabel()
         self.swatch.setFixedSize(28, 28)
         self.swatch.setStyleSheet(
-            f"background-color: {self._tokens['input_bg']};"
-            f" border: 1px solid {self._tokens['input_border']}; border-radius: 14px;")
-        row1.addWidget(self.swatch)
-        for color in PALETTE:
+            f"background-color: transparent;"
+            f" border: 1px dashed {self._tokens['text_muted']}; border-radius: 14px;")
+        self.hex_label = QLabel("—")
+        self.hex_label.setObjectName("MonoValue")
+        armed.addWidget(self.swatch)
+        armed.addWidget(self.hex_label, 1)
+        v.addLayout(armed)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+        for i, color in enumerate(PALETTE):
             sw = QPushButton()
             sw.setFixedSize(28, 28)
+            sw.setCursor(Qt.CursorShape.PointingHandCursor)
             sw.setStyleSheet(self._swatch_style(*color))
             sw.setToolTip(f"rgb({color[0]}, {color[1]}, {color[2]})")
             sw.clicked.connect(lambda _checked=False, c=color: self._arm_color(*c))
-            row1.addWidget(sw)
+            grid.addWidget(sw, i // 6, i % 6)
             self.palette_buttons.append((sw, color))
-        custom = QPushButton("Свой...")
-        custom.clicked.connect(self._custom_color)
-        row1.addWidget(custom)
-        row1.addStretch(1)
-        v.addLayout(row1)
+        v.addLayout(grid)
 
-        row2 = QHBoxLayout()
-        row2.setSpacing(6)
-        self.sel_check = QCheckBox("Выделение")
+        custom = QPushButton("Свой цвет...")
+        custom.clicked.connect(self._custom_color)
+        v.addWidget(custom)
+
+        v.addWidget(self._divider())
+        v.addWidget(self._group_title("ВЫДЕЛЕНИЕ"))
+        self.sel_check = QCheckBox("Режим выделения")
         self.sel_check.toggled.connect(self._set_selection_mode)
-        row2.addWidget(self.sel_check)
+        v.addWidget(self.sel_check)
+
+        row = QHBoxLayout()
+        row.setSpacing(6)
         b_all = QPushButton("Выделить все")
         b_all.clicked.connect(self._select_all)
-        row2.addWidget(b_all)
-        b_none = QPushButton("Снять выделение")
+        row.addWidget(b_all, 1)
+        b_none = QPushButton("Снять")
+        b_none.setToolTip("Снять выделение")
         b_none.clicked.connect(self._deselect_all)
-        row2.addWidget(b_none)
-        b_apply = QPushButton("Покрасить выделенные")
-        b_apply.clicked.connect(self._apply_to_selection)
-        row2.addWidget(b_apply)
-        b_clear = QPushButton("Очистить всё")
-        b_clear.clicked.connect(self._clear_all)
-        row2.addWidget(b_clear)
-        b_rescan = QPushButton("Пересканировать")
-        b_rescan.setToolTip("Повторный поиск клавиатуры по USB")
-        b_rescan.clicked.connect(self._rescan)
-        row2.addWidget(b_rescan)
-        row2.addStretch(1)
-        v.addLayout(row2)
+        row.addWidget(b_none, 1)
+        v.addLayout(row)
 
-        hint = QLabel("ЛКМ — покрасить · ПКМ — очистить · режим «Выделение»: ЛКМ ставит рамку, цвет применяется ко всем выделенным")
-        hint.setStyleSheet(f"color: {self._tokens['text_muted']}; font-size: 11px;")
-        v.addWidget(hint)
+        b_apply = QPushButton("Покрасить выделенные")
+        b_apply.setObjectName("Primary")
+        b_apply.setFixedHeight(32)
+        b_apply.clicked.connect(self._apply_to_selection)
+        v.addWidget(b_apply)
         v.addStretch(1)
 
-        self.tabs.addTab(tab, "Покраска")
+        self.mode_stack.addWidget(page)
 
     def _build_effects_tab(self):
-        tab = QWidget()
-        v = QVBoxLayout(tab)
-        v.setContentsMargins(8, 6, 8, 6)
+        page, v = self._scroll_page()
+        v.addWidget(self._group_title("ЭФФЕКТ"))
 
-        row1 = QHBoxLayout()
-        row1.setSpacing(6)
-        row1.addWidget(QLabel("Эффект:"))
         self.effect_combo = QComboBox()
         self.effect_combo.addItems(EFFECTS)
         self.effect_combo.currentTextChanged.connect(self._on_effect_changed)
-        row1.addWidget(self.effect_combo)
+        v.addWidget(self.effect_combo)
+
+        color_row = QHBoxLayout()
+        color_row.setSpacing(8)
         self.effect_color_swatch = QLabel()
         self.effect_color_swatch.setFixedSize(28, 28)
         self.effect_color_swatch.setStyleSheet(self._swatch_style(255, 255, 255))
-        row1.addWidget(self.effect_color_swatch)
+        color_row.addWidget(self.effect_color_swatch)
         btn_color = QPushButton("Цвет...")
         btn_color.clicked.connect(self._pick_effect_color)
-        row1.addWidget(btn_color)
-        row1.addStretch(1)
-        v.addLayout(row1)
+        color_row.addWidget(btn_color, 1)
+        v.addLayout(color_row)
 
-        row2 = QHBoxLayout()
-        row2.setSpacing(6)
-        row2.addWidget(QLabel("Скорость:"))
+        v.addWidget(QLabel("Скорость"))
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setRange(1, 30)
         self.speed_slider.setValue(10)
-        row2.addWidget(self.speed_slider, 1)
+        v.addWidget(self.speed_slider)
+
+        checks = QGridLayout()
+        checks.setHorizontalSpacing(8)
+        checks.setVerticalSpacing(6)
         self.reverse_check = QCheckBox("Реверс")
-        row2.addWidget(self.reverse_check)
+        checks.addWidget(self.reverse_check, 0, 0)
         self.rainbow_check = QCheckBox("Радужный")
         self.rainbow_check.toggled.connect(self._toggle_rainbow)
-        row2.addWidget(self.rainbow_check)
+        checks.addWidget(self.rainbow_check, 0, 1)
+        v.addLayout(checks)
+
         self.excl_right_check = QCheckBox("Правая секция без эффектов")
         self.excl_right_check.setToolTip(
             "Эффекты не подсвечивают Ins/Home/PgUp/Del/End/PgDn, стрелки "
             "и PrtSc/ScrLk/Pause; амбилайт-сетка растягивается на остальные клавиши")
         self._connect_setting_persist(self.excl_right_check)
         self.excl_right_check.toggled.connect(self._rebuild_led_zones)
-        row2.addWidget(self.excl_right_check)
-        v.addLayout(row2)
+        v.addWidget(self.excl_right_check)
 
-        # Ambilight settings (visible only for Амбилайт)
+        self._build_ambilight_widget()
+        v.addWidget(self.ambi_widget)
+        self._build_audio_widget()
+        v.addWidget(self.audio_widget)
+
+        v.addWidget(self._divider())
+        v.addWidget(self._group_title("УПРАВЛЕНИЕ"))
+        run_row = QHBoxLayout()
+        run_row.setSpacing(6)
+        self.start_btn = QPushButton("Запустить")
+        self.start_btn.setObjectName("Primary")
+        self.start_btn.clicked.connect(self._start_effect)
+        run_row.addWidget(self.start_btn)
+        self.stop_btn = QPushButton("Стоп")
+        self.stop_btn.clicked.connect(self._stop_effect)
+        run_row.addWidget(self.stop_btn)
+        v.addLayout(run_row)
+        self.preview_check = QCheckBox("Превью без клавиатуры")
+        self.preview_check.setToolTip("Анимация только на экране, без клавиатуры")
+        self.preview_check.toggled.connect(self._toggle_preview)
+        v.addWidget(self.preview_check)
+        v.addStretch(1)
+
+        self.mode_stack.addWidget(page)
+
+    def _build_ambilight_widget(self):
         self.ambi_widget = QWidget()
-        ambi_layout = QVBoxLayout(self.ambi_widget)
-        ambi_layout.setContentsMargins(0, 0, 0, 0)
-        ambi_layout.setSpacing(4)
+        v = QVBoxLayout(self.ambi_widget)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(8)
 
-        ambi_row1 = QHBoxLayout()
-        ambi_row1.setSpacing(6)
-        ambi_row1.addWidget(QLabel("Монитор:"))
+        v.addWidget(self._group_title("AMBIENT LIGHT"))
+        v.addWidget(QLabel("Монитор"))
         self.screen_combo = QComboBox()
         self.screens = QApplication.screens()
         for i, sc in enumerate(self.screens):
@@ -855,60 +1046,58 @@ class MainWindow(QMainWindow):
         primary = QApplication.primaryScreen()
         default_idx = self.screens.index(primary) if primary in self.screens else 0
         self.screen_combo.setCurrentIndex(default_idx)
-        ambi_row1.addWidget(self.screen_combo)
-        ambi_row1.addWidget(QLabel("Режим:"))
+        v.addWidget(self.screen_combo)
+
+        v.addWidget(QLabel("Режим захвата"))
         self.ambi_mode_combo = QComboBox()
         self.ambi_mode_combo.addItems(["Сетка (колонки × строки)", "Колонки"])
-        ambi_row1.addWidget(self.ambi_mode_combo)
-        ambi_row1.addStretch(1)
-        ambi_layout.addLayout(ambi_row1)
+        v.addWidget(self.ambi_mode_combo)
 
-        ambi_row2 = QHBoxLayout()
-        ambi_row2.setSpacing(6)
-        ambi_row2.addWidget(QLabel("Колонок:"))
+        spins = QGridLayout()
+        spins.setHorizontalSpacing(8)
+        spins.setVerticalSpacing(4)
+        spins.addWidget(QLabel("Колонок"), 0, 0)
         self.ambi_cols_spin = QSpinBox()
         self.ambi_cols_spin.setRange(1, 16)
         self.ambi_cols_spin.setValue(8)
-        ambi_row2.addWidget(self.ambi_cols_spin)
-        ambi_row2.addWidget(QLabel("Строк:"))
+        spins.addWidget(self.ambi_cols_spin, 1, 0)
+        spins.addWidget(QLabel("Строк"), 0, 1)
         self.ambi_rows_spin = QSpinBox()
         self.ambi_rows_spin.setRange(1, 6)
         self.ambi_rows_spin.setValue(4)
-        ambi_row2.addWidget(self.ambi_rows_spin)
-        ambi_row2.addWidget(QLabel("Частота (Гц):"))
+        spins.addWidget(self.ambi_rows_spin, 1, 1)
+        spins.addWidget(QLabel("Частота, Гц"), 0, 2)
         self.ambi_hz_spin = QSpinBox()
         self.ambi_hz_spin.setRange(5, 60)
         self.ambi_hz_spin.setValue(25)
-        ambi_row2.addWidget(self.ambi_hz_spin)
-        ambi_row2.addWidget(QLabel("Сглаживание:"))
+        spins.addWidget(self.ambi_hz_spin, 1, 2)
+        spins.setColumnStretch(0, 1)
+        spins.setColumnStretch(1, 1)
+        spins.setColumnStretch(2, 1)
+        v.addLayout(spins)
+
+        v.addWidget(QLabel("Сглаживание"))
         self.ambi_smooth_slider = QSlider(Qt.Orientation.Horizontal)
         self.ambi_smooth_slider.setRange(10, 100)
         self.ambi_smooth_slider.setValue(60)
-        self.ambi_smooth_slider.setFixedWidth(110)
-        ambi_row2.addWidget(self.ambi_smooth_slider)
-        ambi_row2.addStretch(1)
-        ambi_layout.addLayout(ambi_row2)
+        v.addWidget(self.ambi_smooth_slider)
 
-        ambi_row3 = QHBoxLayout()
-        ambi_row3.setSpacing(6)
-        ambi_row3.addWidget(QLabel("Насыщенность:"))
+        v.addWidget(QLabel("Насыщенность"))
         self.ambi_sat_slider = QSlider(Qt.Orientation.Horizontal)
         self.ambi_sat_slider.setRange(0, 200)
         self.ambi_sat_slider.setValue(30)
-        self.ambi_sat_slider.setFixedWidth(110)
         self.ambi_sat_slider.setToolTip("100% — как на экране, выше — сочнее")
-        ambi_row3.addWidget(self.ambi_sat_slider)
-        ambi_row3.addWidget(QLabel("Яркость:"))
+        v.addWidget(self.ambi_sat_slider)
+
+        v.addWidget(QLabel("Яркость"))
         self.ambi_bright_slider = QSlider(Qt.Orientation.Horizontal)
         self.ambi_bright_slider.setRange(10, 200)
         self.ambi_bright_slider.setValue(130)
-        self.ambi_bright_slider.setFixedWidth(110)
         self.ambi_bright_slider.setToolTip("100% — без изменений, выше — ярче")
-        ambi_row3.addWidget(self.ambi_bright_slider)
+        v.addWidget(self.ambi_bright_slider)
+
         self.ambi_dark_check = QCheckBox("Игнорировать чёрные полосы")
-        ambi_row3.addWidget(self.ambi_dark_check)
-        ambi_row3.addStretch(1)
-        ambi_layout.addLayout(ambi_row3)
+        v.addWidget(self.ambi_dark_check)
 
         self._amba_monitors = []
         if _mss is not None:
@@ -928,102 +1117,80 @@ class MainWindow(QMainWindow):
                        self.ambi_sat_slider, self.ambi_bright_slider, self.screen_combo):
             self._connect_setting_persist(widget)
         self.ambi_widget.setVisible(False)
-        v.addWidget(self.ambi_widget)
 
-        # Game presets (visible only for Статичный)
-        self.game_widget = QWidget()
-        game_layout = QHBoxLayout(self.game_widget)
-        game_layout.setContentsMargins(0, 0, 0, 0)
-        game_layout.setSpacing(6)
-        game_layout.addWidget(QLabel("Игровые пресеты:"))
-        presets_btn = QToolButton()
-        presets_btn.setText("Игра ▾")
-        presets_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        menu = QMenu()
-        for name in GAME_PRESETS:
-            act = menu.addAction(name)
-            act.triggered.connect(lambda _checked=False, n=name: self._apply_game_preset(n))
-        menu.addSeparator()
-        off = menu.addAction("Всё выключить")
-        off.triggered.connect(self._clear_all)
-        presets_btn.setMenu(menu)
-        game_layout.addWidget(presets_btn)
-        game_layout.addStretch(1)
-        self.game_widget.setVisible(False)
-        v.addWidget(self.game_widget)
-
+    def _build_audio_widget(self):
         self.audio_widget = QWidget()
-        audio_layout = QVBoxLayout(self.audio_widget)
-        audio_layout.setContentsMargins(0, 0, 0, 0)
-        audio_layout.setSpacing(4)
+        v = QVBoxLayout(self.audio_widget)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(8)
 
+        v.addWidget(self._group_title("АУДИО"))
         self.spectrum_widget = SpectrumWidget(self._tokens)
-        self.spectrum_widget.setFixedHeight(58)
-        audio_layout.addWidget(self.spectrum_widget)
+        self.spectrum_widget.setFixedHeight(64)
+        v.addWidget(self.spectrum_widget)
 
-        audio_row1 = QHBoxLayout()
-        audio_row1.setSpacing(6)
-        audio_row1.addWidget(QLabel("Устройство:"))
+        v.addWidget(QLabel("Устройство"))
+        device_row = QHBoxLayout()
+        device_row.setSpacing(6)
         self.audio_device_combo = QComboBox()
-        self.audio_device_combo.setMinimumWidth(220)
-        audio_row1.addWidget(self.audio_device_combo)
-        audio_refresh = QPushButton("⟳")
-        audio_refresh.setFixedWidth(34)
+        device_row.addWidget(self.audio_device_combo, 1)
+        audio_refresh = QPushButton("Обновить")
         audio_refresh.setToolTip("Обновить список устройств")
         audio_refresh.clicked.connect(self._refresh_audio_devices)
-        audio_row1.addWidget(audio_refresh)
-        audio_row1.addWidget(QLabel("Полос:"))
+        device_row.addWidget(audio_refresh)
+        v.addLayout(device_row)
+
+        opts = QHBoxLayout()
+        opts.setSpacing(6)
+        opts.addWidget(QLabel("Полос"))
         self.audio_bands_spin = QSpinBox()
         self.audio_bands_spin.setRange(4, 64)
         self.audio_bands_spin.setValue(16)
-        audio_row1.addWidget(self.audio_bands_spin)
-        audio_row1.addWidget(QLabel("Шкала:"))
+        opts.addWidget(self.audio_bands_spin)
+        opts.addWidget(QLabel("Шкала"))
         self.audio_scale_combo = QComboBox()
         self.audio_scale_combo.addItems(["Лог", "Mel", "Линейная"])
-        audio_row1.addWidget(self.audio_scale_combo)
-        audio_row1.addStretch(1)
-        audio_layout.addLayout(audio_row1)
+        opts.addWidget(self.audio_scale_combo, 1)
+        v.addLayout(opts)
 
-        audio_row2 = QHBoxLayout()
-        audio_row2.setSpacing(6)
-        audio_row2.addWidget(QLabel("Гейн (дБ):"))
+        v.addWidget(QLabel("Гейн (дБ)"))
         self.audio_gain_slider = QSlider(Qt.Orientation.Horizontal)
         self.audio_gain_slider.setRange(-24, 24)
         self.audio_gain_slider.setValue(0)
-        self.audio_gain_slider.setFixedWidth(100)
-        audio_row2.addWidget(self.audio_gain_slider)
-        audio_row2.addWidget(QLabel("Пол (дБ):"))
+        v.addWidget(self.audio_gain_slider)
+
+        floor_row = QHBoxLayout()
+        floor_row.setSpacing(6)
+        floor_row.addWidget(QLabel("Пол (дБ)"))
         self.audio_floor_spin = QSpinBox()
         self.audio_floor_spin.setRange(-90, -20)
         self.audio_floor_spin.setValue(-80)
-        audio_row2.addWidget(self.audio_floor_spin)
-        audio_row2.addWidget(QLabel("Атака:"))
+        floor_row.addWidget(self.audio_floor_spin)
+        floor_row.addStretch(1)
+        v.addLayout(floor_row)
+
+        v.addWidget(QLabel("Атака"))
         self.audio_attack_slider = QSlider(Qt.Orientation.Horizontal)
         self.audio_attack_slider.setRange(1, 200)
         self.audio_attack_slider.setValue(10)
-        self.audio_attack_slider.setFixedWidth(80)
-        audio_row2.addWidget(self.audio_attack_slider)
-        audio_row2.addWidget(QLabel("Спад:"))
+        v.addWidget(self.audio_attack_slider)
+
+        v.addWidget(QLabel("Спад"))
         self.audio_release_slider = QSlider(Qt.Orientation.Horizontal)
         self.audio_release_slider.setRange(10, 1000)
         self.audio_release_slider.setValue(150)
-        self.audio_release_slider.setFixedWidth(80)
-        audio_row2.addWidget(self.audio_release_slider)
-        audio_row2.addStretch(1)
-        audio_layout.addLayout(audio_row2)
+        v.addWidget(self.audio_release_slider)
 
-        audio_row3 = QHBoxLayout()
-        audio_row3.setSpacing(6)
-        audio_row3.addWidget(QLabel("Цвет:"))
+        color_row = QHBoxLayout()
+        color_row.setSpacing(6)
+        color_row.addWidget(QLabel("Цвет"))
         self.audio_color_combo = QComboBox()
-        self.audio_color_combo.addItems(
-            ["MiniMeters", "Радужный", "Статичный"])
-        audio_row3.addWidget(self.audio_color_combo)
+        self.audio_color_combo.addItems(["MiniMeters", "Радужный", "Статичный"])
+        color_row.addWidget(self.audio_color_combo, 1)
         self.audio_mono_check = QCheckBox("Моно")
         self.audio_mono_check.setChecked(True)
-        audio_row3.addWidget(self.audio_mono_check)
-        audio_row3.addStretch(1)
-        audio_layout.addLayout(audio_row3)
+        color_row.addWidget(self.audio_mono_check)
+        v.addLayout(color_row)
 
         self._refresh_audio_devices()
         for widget in (self.audio_device_combo, self.audio_bands_spin,
@@ -1041,25 +1208,6 @@ class MainWindow(QMainWindow):
             elif isinstance(widget, QSlider):
                 widget.valueChanged.connect(self._audio_settings_changed)
         self.audio_widget.setVisible(False)
-        v.addWidget(self.audio_widget)
-
-        row3 = QHBoxLayout()
-        row3.setSpacing(6)
-        self.start_btn = QPushButton("Запустить")
-        self.start_btn.clicked.connect(self._start_effect)
-        row3.addWidget(self.start_btn)
-        self.stop_btn = QPushButton("Стоп")
-        self.stop_btn.clicked.connect(self._stop_effect)
-        row3.addWidget(self.stop_btn)
-        self.preview_check = QCheckBox("Превью")
-        self.preview_check.setToolTip("Анимация только на экране, без клавиатуры")
-        self.preview_check.toggled.connect(self._toggle_preview)
-        row3.addWidget(self.preview_check)
-        row3.addStretch(1)
-        v.addLayout(row3)
-        v.addStretch(1)
-
-        self.tabs.addTab(tab, "Эффекты")
 
     # -- Settings dialog ---------------------------------------------------
     def _build_settings_dialog(self):
@@ -1301,6 +1449,9 @@ class MainWindow(QMainWindow):
         self.header.set_tokens(tokens)
         self.background.set_tokens(tokens)
         self.status_label.set_tokens(tokens)
+        self.rail.set_tokens(tokens)
+        self.presets_panel.set_tokens(tokens)
+        self.dock.set_tokens(tokens)
         self._settings_panel.set_tokens(tokens)
         self.spectrum_widget.set_tokens(tokens)
 
@@ -1425,6 +1576,7 @@ class MainWindow(QMainWindow):
     def _restyle_all(self):
         for name in self.key_buttons:
             self._apply_style(name)
+        self._update_stats()
 
     def _on_key_clicked(self, btn):
         if self.keyboard is None:
@@ -1445,6 +1597,7 @@ class MainWindow(QMainWindow):
         self._stop_effect()
         self.painted[name] = self.current_color
         self._apply_style(name)
+        self._update_stats()
         self._send()
 
     def _clear_key(self, btn):
@@ -1453,6 +1606,7 @@ class MainWindow(QMainWindow):
         self.painted.pop(name, None)
         self.selected.discard(name)
         self._apply_style(name)
+        self._update_stats()
         self._send()
 
     def _toggle_selection(self, name):
@@ -1461,6 +1615,7 @@ class MainWindow(QMainWindow):
         else:
             self.selected.add(name)
         self._apply_style(name)
+        self._update_stats()
 
     def _set_selection_mode(self, checked):
         self.selection_mode = checked
@@ -1488,6 +1643,7 @@ class MainWindow(QMainWindow):
         for name in self.selected:
             self.painted[name] = self.current_color
             self._apply_style(name)
+        self._update_stats()
         self._send()
 
     def _clear_all(self):
@@ -1495,7 +1651,6 @@ class MainWindow(QMainWindow):
         self.painted.clear()
         self.selected.clear()
         self._restyle_all()
-        self.header.set_color(None)
         self.background.set_ambient(None)
         if self.keyboard is not None:
             try:
@@ -1509,6 +1664,8 @@ class MainWindow(QMainWindow):
             return
         if self.active_effect != "Игра":
             self._stop_effect()
+        if self.effect_combo.currentText() != "Игра":
+            self.effect_combo.setCurrentText("Игра")
         preset = GAME_PRESETS[name]
         color = preset["color"]
         self.painted.clear()
@@ -1516,8 +1673,12 @@ class MainWindow(QMainWindow):
             self.painted[key] = color
         self.current_color = color
         self.swatch.setStyleSheet(self._swatch_style(*color, active=True))
+        self.hex_label.setText("#%02X%02X%02X" % color)
         self.header.set_color(color)
         self.background.set_ambient(color)
+        for btn, preset_color in self.palette_buttons:
+            btn.setStyleSheet(self._swatch_style(*preset_color,
+                                                 active=preset_color == color))
         self._restyle_all()
         self._send()
 
@@ -1537,6 +1698,7 @@ class MainWindow(QMainWindow):
     def _arm_color(self, r, g, b):
         self.current_color = (r, g, b)
         self.swatch.setStyleSheet(self._swatch_style(r, g, b, active=True))
+        self.hex_label.setText("#%02X%02X%02X" % (r, g, b))
         self.header.set_color(self.current_color)
         self.background.set_ambient(self.current_color)
         for btn, color in self.palette_buttons:
@@ -1886,7 +2048,6 @@ class MainWindow(QMainWindow):
 
     def _on_effect_changed(self, text):
         self.ambi_widget.setVisible(text == "Амбилайт")
-        self.game_widget.setVisible(text == "Игра")
         self.audio_widget.setVisible(text in AUDIO_EFFECTS)
         if text != "Амбилайт":
             self._stop_ambi_worker()
@@ -1903,6 +2064,7 @@ class MainWindow(QMainWindow):
             self._last_tick = None
             self._sparkle_keys.clear()
             self._snake_path = None
+        self._update_stats()
 
     def _start_effect(self):
         if self.keyboard is None:
@@ -2143,7 +2305,7 @@ class MainWindow(QMainWindow):
                 colors[idx] = hsv_to_rgb(hue, 1.0, 1.0)
             return colors
         if effect == "Пульс":
-            cx, cy = WINDOW_W // 2, KEYBOARD_H // 2
+            cx, cy = KEYBOARD_W // 2, KEYBOARD_H // 2
             ring = self._frame * 0.6 * speed
             for idx in range(n):
                 x, y = self.led_pos.get(idx, (cx, cy))
@@ -2157,7 +2319,7 @@ class MainWindow(QMainWindow):
                     colors[idx] = (int(r0 * v), int(g0 * v), int(b0 * v))
             return colors
         if effect == "Сканер":
-            bar = (self._frame * speed * 3.0 * direction) % (WINDOW_W + 100)
+            bar = (self._frame * speed * 3.0 * direction) % (KEYBOARD_W + 100)
             bar_width = 60
             for idx in range(n):
                 x = self.led_pos.get(idx, (0, 0))[0]

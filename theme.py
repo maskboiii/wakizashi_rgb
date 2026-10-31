@@ -165,6 +165,27 @@ QScrollBar:horizontal { background: $scroll_bg; height: 8px; border-radius: 4px;
 QScrollBar::handle:horizontal { background: $scroll_handle; border-radius: 4px; min-width: 30px; }
 QScrollBar::handle:horizontal:hover { background: $accent; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
+
+QStackedWidget { background: transparent; }
+QScrollArea { background: transparent; border: none; }
+QScrollArea > QWidget > QWidget { background: transparent; }
+
+QPushButton#SegMode { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 7px 10px; color: $text_dim; font-weight: 600; }
+QPushButton#SegMode:hover { background-color: $glass_fill_strong; color: $text; }
+QPushButton#SegMode:checked { background-color: $tab_active_bg; border-color: $accent_dim; color: $accent; }
+
+QPushButton#Primary { background-color: $accent; border: 1px solid $accent; color: $accent_text; }
+QPushButton#Primary:hover { background-color: $accent_hi; border-color: $accent_hi; color: $accent_text; }
+QPushButton#Primary:pressed { background-color: $accent_dim; border-color: $accent_dim; color: $accent_text; }
+
+QPushButton#Preset { padding: 5px 8px; font-size: 11px; }
+
+QLabel#GroupTitle { color: $text_muted; font-size: 10px; font-weight: 700; }
+QLabel#MonoValue { color: $text_dim; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; }
+QLabel#StatValue { color: $text; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 20px; font-weight: 700; }
+QLabel#StatText { color: $text_dim; font-size: 13px; font-weight: 600; }
+QFrame#Divider { background-color: $glass_border; border: none; max-height: 1px; }
+QFrame#VDivider { background-color: $glass_border; border: none; max-width: 1px; }
 """)
 
 
