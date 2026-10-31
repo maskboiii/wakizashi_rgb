@@ -250,6 +250,24 @@ AUDIO_EFFECT_MODES = {
     "Аудио-пульс": "pulse",
 }
 
+# Which controls actually affect each effect. Anything omitted is hidden in
+# the rail to keep the panel focused. Audio effects are handled dynamically
+# because their colour mode has its own selector.
+EFFECT_PARAMS = {
+    "Статичный": {"color", "rainbow"},
+    "Дыхание": {"speed", "color", "rainbow"},
+    "Радуга": {"speed", "reverse"},
+    "Волна": {"speed", "reverse", "color", "rainbow"},
+    "Амбилайт": set(),
+    "Игра": set(),
+    "Змейка": {"speed", "reverse", "color", "rainbow"},
+    "Звёздный дождь": {"speed"},
+    "Цветовой цикл": {"speed", "reverse"},
+    "Пульс": {"speed", "reverse", "color", "rainbow"},
+    "Сканер": {"speed", "reverse", "color", "rainbow"},
+    "Реактивный": {"speed", "color", "rainbow"},
+}
+
 # One-click game lighting presets. Selecting one turns every other key off
 # and lights only the listed keys in the preset colour.
 GAME_PRESETS = {
@@ -738,12 +756,9 @@ class MainWindow(QMainWindow):
         self._build_presets_panel(stage)
         stage_layout.addWidget(self.presets_panel)
 
-        self._build_stats_panel(stage)
-        stage_layout.addWidget(self.stats_panel)
-        stage_layout.addStretch(1)
-
         self._build_dock(stage)
         stage_layout.addWidget(self.dock)
+        stage_layout.addStretch(1)
         body_layout.addWidget(stage, 1)
 
         self._build_side_rail(body)
@@ -755,17 +770,9 @@ class MainWindow(QMainWindow):
         outer.addWidget(self.status_label)
 
         self._build_keys()
-        self._update_stats()
         self.mode_buttons[0].setFocus()
 
     # -- Layout helpers --------------------------------------------------
-    def _update_stats(self):
-        if not hasattr(self, "stat_painted"):
-            return
-        self.stat_painted.setText(str(len(self.painted)))
-        self.stat_selected.setText(str(len(self.selected)))
-        self.stat_effect.setText(self.effect_combo.currentText())
-
     def _group_title(self, text):
         label = QLabel(text)
         label.setObjectName("GroupTitle")
@@ -808,38 +815,6 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(lambda _checked=False, n=name: self._apply_game_preset(n))
             grid.addWidget(btn, i // 5, i % 5)
         layout.addLayout(grid)
-
-    def _build_stats_panel(self, parent):
-        self.stats_panel = GlassPanel(self._tokens, 14, parent)
-        self.stats_panel.setFixedHeight(66)
-        layout = QHBoxLayout(self.stats_panel)
-        layout.setContentsMargins(18, 10, 18, 10)
-        layout.setSpacing(24)
-
-        def block(caption, value, object_name):
-            box = QVBoxLayout()
-            box.setSpacing(0)
-            val = QLabel(value)
-            val.setObjectName(object_name)
-            cap = QLabel(caption)
-            cap.setObjectName("GroupTitle")
-            box.addWidget(val)
-            box.addWidget(cap)
-            layout.addLayout(box)
-            return val
-
-        self.stat_painted = block("ПОКРАШЕНО", "0", "StatValue")
-        layout.addWidget(self._vdivider())
-        self.stat_selected = block("ВЫДЕЛЕНО", "0", "StatValue")
-        layout.addWidget(self._vdivider())
-        self.stat_effect = block("АКТИВНЫЙ ЭФФЕКТ", "—", "StatText")
-        layout.addStretch(1)
-
-    def _vdivider(self):
-        line = QFrame()
-        line.setObjectName("VDivider")
-        line.setFixedWidth(1)
-        return line
 
     def _build_dock(self, parent):
         self.dock = GlassPanel(self._tokens, 12, parent)
@@ -884,13 +859,36 @@ class MainWindow(QMainWindow):
         self._build_effects_tab()
         layout.addWidget(self.mode_stack, 1)
 
-        layout.addWidget(self._divider())
-        self.settings_btn = QPushButton("Настройки")
-        self.settings_btn.setToolTip("Настройки приложения")
-        self.settings_btn.clicked.connect(self._open_settings)
-        layout.addWidget(self.settings_btn)
+        self._build_rail_footer(layout)
 
         self._set_mode(0)
+
+    def _build_rail_footer(self, layout):
+        layout.addWidget(self._divider())
+        run_row = QHBoxLayout()
+        run_row.setSpacing(6)
+        self.start_btn = QPushButton("Запустить")
+        self.start_btn.setObjectName("Primary")
+        self.start_btn.clicked.connect(self._start_effect)
+        run_row.addWidget(self.start_btn, 1)
+        self.stop_btn = QPushButton("Стоп")
+        self.stop_btn.clicked.connect(self._stop_effect)
+        run_row.addWidget(self.stop_btn)
+        layout.addLayout(run_row)
+
+        bottom = QHBoxLayout()
+        bottom.setSpacing(8)
+        self.preview_check = QCheckBox("Превью")
+        self.preview_check.setToolTip("Анимация только на экране, без клавиатуры")
+        self.preview_check.toggled.connect(self._toggle_preview)
+        bottom.addWidget(self.preview_check)
+        bottom.addStretch(1)
+        self.settings_btn = QPushButton("Настройки")
+        self.settings_btn.setToolTip("Настройки приложения")
+        self.settings_btn.setFixedHeight(28)
+        self.settings_btn.clicked.connect(self._open_settings)
+        bottom.addWidget(self.settings_btn)
+        layout.addLayout(bottom)
 
     def _set_mode(self, index):
         for i, btn in enumerate(self.mode_buttons):
@@ -962,7 +960,10 @@ class MainWindow(QMainWindow):
         self.mode_stack.addWidget(page)
 
     def _build_effects_tab(self):
-        page, v = self._scroll_page()
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(0, 0, 6, 0)
+        v.setSpacing(6)
         v.addWidget(self._group_title("ЭФФЕКТ"))
 
         self.effect_combo = QComboBox()
@@ -970,7 +971,9 @@ class MainWindow(QMainWindow):
         self.effect_combo.currentTextChanged.connect(self._on_effect_changed)
         v.addWidget(self.effect_combo)
 
-        color_row = QHBoxLayout()
+        self.effect_color_box = QWidget()
+        color_row = QHBoxLayout(self.effect_color_box)
+        color_row.setContentsMargins(0, 0, 0, 0)
         color_row.setSpacing(8)
         self.effect_color_swatch = QLabel()
         self.effect_color_swatch.setFixedSize(28, 28)
@@ -979,22 +982,27 @@ class MainWindow(QMainWindow):
         btn_color = QPushButton("Цвет...")
         btn_color.clicked.connect(self._pick_effect_color)
         color_row.addWidget(btn_color, 1)
-        v.addLayout(color_row)
+        v.addWidget(self.effect_color_box)
 
-        v.addWidget(QLabel("Скорость"))
+        self.speed_box = QWidget()
+        speed_row = QHBoxLayout(self.speed_box)
+        speed_row.setContentsMargins(0, 0, 0, 0)
+        speed_row.setSpacing(10)
+        speed_row.addWidget(QLabel("Скорость"))
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setRange(1, 30)
         self.speed_slider.setValue(10)
-        v.addWidget(self.speed_slider)
+        speed_row.addWidget(self.speed_slider, 1)
+        v.addWidget(self.speed_box)
 
-        checks = QGridLayout()
-        checks.setHorizontalSpacing(8)
-        checks.setVerticalSpacing(6)
+        checks = QHBoxLayout()
+        checks.setSpacing(16)
         self.reverse_check = QCheckBox("Реверс")
-        checks.addWidget(self.reverse_check, 0, 0)
+        checks.addWidget(self.reverse_check)
         self.rainbow_check = QCheckBox("Радужный")
         self.rainbow_check.toggled.connect(self._toggle_rainbow)
-        checks.addWidget(self.rainbow_check, 0, 1)
+        checks.addWidget(self.rainbow_check)
+        checks.addStretch(1)
         v.addLayout(checks)
 
         self.excl_right_check = QCheckBox("Правая секция без эффектов")
@@ -1005,39 +1013,46 @@ class MainWindow(QMainWindow):
         self.excl_right_check.toggled.connect(self._rebuild_led_zones)
         v.addWidget(self.excl_right_check)
 
+        v.addWidget(self._divider())
         self._build_ambilight_widget()
         v.addWidget(self.ambi_widget)
         self._build_audio_widget()
         v.addWidget(self.audio_widget)
-
-        v.addWidget(self._divider())
-        v.addWidget(self._group_title("УПРАВЛЕНИЕ"))
-        run_row = QHBoxLayout()
-        run_row.setSpacing(6)
-        self.start_btn = QPushButton("Запустить")
-        self.start_btn.setObjectName("Primary")
-        self.start_btn.clicked.connect(self._start_effect)
-        run_row.addWidget(self.start_btn)
-        self.stop_btn = QPushButton("Стоп")
-        self.stop_btn.clicked.connect(self._stop_effect)
-        run_row.addWidget(self.stop_btn)
-        v.addLayout(run_row)
-        self.preview_check = QCheckBox("Превью без клавиатуры")
-        self.preview_check.setToolTip("Анимация только на экране, без клавиатуры")
-        self.preview_check.toggled.connect(self._toggle_preview)
-        v.addWidget(self.preview_check)
         v.addStretch(1)
 
+        self._update_effect_params()
         self.mode_stack.addWidget(page)
+
+    def _update_effect_params(self, *_):
+        if not hasattr(self, "speed_box"):
+            return
+        effect = self.effect_combo.currentText()
+        if effect in AUDIO_EFFECTS:
+            params = {"rainbow"}
+            if effect in ("Спектр", "Спектр 2D"):
+                if self.audio_color_combo.currentIndex() == 2:
+                    params.add("color")
+            else:
+                params.add("color")
+        else:
+            params = EFFECT_PARAMS.get(
+                effect, {"speed", "reverse", "color", "rainbow"})
+        self.speed_box.setVisible("speed" in params)
+        self.reverse_check.setVisible("reverse" in params)
+        self.rainbow_check.setVisible("rainbow" in params)
+        self.effect_color_box.setVisible("color" in params)
 
     def _build_ambilight_widget(self):
         self.ambi_widget = QWidget()
         v = QVBoxLayout(self.ambi_widget)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(8)
+        v.setSpacing(6)
 
         v.addWidget(self._group_title("AMBIENT LIGHT"))
-        v.addWidget(QLabel("Монитор"))
+
+        monitor_row = QHBoxLayout()
+        monitor_row.setSpacing(8)
+        monitor_row.addWidget(QLabel("Монитор"))
         self.screen_combo = QComboBox()
         self.screens = QApplication.screens()
         for i, sc in enumerate(self.screens):
@@ -1046,16 +1061,20 @@ class MainWindow(QMainWindow):
         primary = QApplication.primaryScreen()
         default_idx = self.screens.index(primary) if primary in self.screens else 0
         self.screen_combo.setCurrentIndex(default_idx)
-        v.addWidget(self.screen_combo)
+        monitor_row.addWidget(self.screen_combo, 1)
+        v.addLayout(monitor_row)
 
-        v.addWidget(QLabel("Режим захвата"))
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        mode_row.addWidget(QLabel("Режим"))
         self.ambi_mode_combo = QComboBox()
         self.ambi_mode_combo.addItems(["Сетка (колонки × строки)", "Колонки"])
-        v.addWidget(self.ambi_mode_combo)
+        mode_row.addWidget(self.ambi_mode_combo, 1)
+        v.addLayout(mode_row)
 
         spins = QGridLayout()
         spins.setHorizontalSpacing(8)
-        spins.setVerticalSpacing(4)
+        spins.setVerticalSpacing(2)
         spins.addWidget(QLabel("Колонок"), 0, 0)
         self.ambi_cols_spin = QSpinBox()
         self.ambi_cols_spin.setRange(1, 16)
@@ -1071,30 +1090,34 @@ class MainWindow(QMainWindow):
         self.ambi_hz_spin.setRange(5, 60)
         self.ambi_hz_spin.setValue(25)
         spins.addWidget(self.ambi_hz_spin, 1, 2)
-        spins.setColumnStretch(0, 1)
-        spins.setColumnStretch(1, 1)
-        spins.setColumnStretch(2, 1)
+        for column in range(3):
+            spins.setColumnStretch(column, 1)
         v.addLayout(spins)
 
-        v.addWidget(QLabel("Сглаживание"))
         self.ambi_smooth_slider = QSlider(Qt.Orientation.Horizontal)
         self.ambi_smooth_slider.setRange(10, 100)
         self.ambi_smooth_slider.setValue(60)
-        v.addWidget(self.ambi_smooth_slider)
-
-        v.addWidget(QLabel("Насыщенность"))
         self.ambi_sat_slider = QSlider(Qt.Orientation.Horizontal)
         self.ambi_sat_slider.setRange(0, 200)
         self.ambi_sat_slider.setValue(30)
         self.ambi_sat_slider.setToolTip("100% — как на экране, выше — сочнее")
-        v.addWidget(self.ambi_sat_slider)
-
-        v.addWidget(QLabel("Яркость"))
         self.ambi_bright_slider = QSlider(Qt.Orientation.Horizontal)
         self.ambi_bright_slider.setRange(10, 200)
         self.ambi_bright_slider.setValue(130)
         self.ambi_bright_slider.setToolTip("100% — без изменений, выше — ярче")
-        v.addWidget(self.ambi_bright_slider)
+
+        sliders = QGridLayout()
+        sliders.setHorizontalSpacing(8)
+        sliders.setVerticalSpacing(4)
+        for row, (label, slider) in enumerate((
+            ("Сглаживание", self.ambi_smooth_slider),
+            ("Насыщенность", self.ambi_sat_slider),
+            ("Яркость", self.ambi_bright_slider),
+        )):
+            sliders.addWidget(QLabel(label), row, 0)
+            sliders.addWidget(slider, row, 1)
+        sliders.setColumnStretch(1, 1)
+        v.addLayout(sliders)
 
         self.ambi_dark_check = QCheckBox("Игнорировать чёрные полосы")
         v.addWidget(self.ambi_dark_check)
@@ -1122,17 +1145,20 @@ class MainWindow(QMainWindow):
         self.audio_widget = QWidget()
         v = QVBoxLayout(self.audio_widget)
         v.setContentsMargins(0, 0, 0, 0)
-        v.setSpacing(8)
+        v.setSpacing(6)
 
         v.addWidget(self._group_title("АУДИО"))
         self.spectrum_widget = SpectrumWidget(self._tokens)
-        self.spectrum_widget.setFixedHeight(64)
+        self.spectrum_widget.setFixedHeight(48)
         v.addWidget(self.spectrum_widget)
 
-        v.addWidget(QLabel("Устройство"))
         device_row = QHBoxLayout()
-        device_row.setSpacing(6)
+        device_row.setSpacing(8)
+        device_row.addWidget(QLabel("Устройство"))
         self.audio_device_combo = QComboBox()
+        self.audio_device_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.audio_device_combo.setMinimumContentsLength(10)
         device_row.addWidget(self.audio_device_combo, 1)
         audio_refresh = QPushButton("Обновить")
         audio_refresh.setToolTip("Обновить список устройств")
@@ -1153,37 +1179,36 @@ class MainWindow(QMainWindow):
         opts.addWidget(self.audio_scale_combo, 1)
         v.addLayout(opts)
 
-        v.addWidget(QLabel("Гейн (дБ)"))
         self.audio_gain_slider = QSlider(Qt.Orientation.Horizontal)
         self.audio_gain_slider.setRange(-24, 24)
         self.audio_gain_slider.setValue(0)
-        v.addWidget(self.audio_gain_slider)
-
-        floor_row = QHBoxLayout()
-        floor_row.setSpacing(6)
-        floor_row.addWidget(QLabel("Пол (дБ)"))
         self.audio_floor_spin = QSpinBox()
         self.audio_floor_spin.setRange(-90, -20)
         self.audio_floor_spin.setValue(-80)
-        floor_row.addWidget(self.audio_floor_spin)
-        floor_row.addStretch(1)
-        v.addLayout(floor_row)
-
-        v.addWidget(QLabel("Атака"))
         self.audio_attack_slider = QSlider(Qt.Orientation.Horizontal)
         self.audio_attack_slider.setRange(1, 200)
         self.audio_attack_slider.setValue(10)
-        v.addWidget(self.audio_attack_slider)
-
-        v.addWidget(QLabel("Спад"))
         self.audio_release_slider = QSlider(Qt.Orientation.Horizontal)
         self.audio_release_slider.setRange(10, 1000)
         self.audio_release_slider.setValue(150)
-        v.addWidget(self.audio_release_slider)
+
+        sliders = QGridLayout()
+        sliders.setHorizontalSpacing(8)
+        sliders.setVerticalSpacing(4)
+        for row, (label, widget) in enumerate((
+            ("Гейн, дБ", self.audio_gain_slider),
+            ("Пол, дБ", self.audio_floor_spin),
+            ("Атака", self.audio_attack_slider),
+            ("Спад", self.audio_release_slider),
+        )):
+            sliders.addWidget(QLabel(label), row, 0)
+            sliders.addWidget(widget, row, 1)
+        sliders.setColumnStretch(1, 1)
+        v.addLayout(sliders)
 
         color_row = QHBoxLayout()
         color_row.setSpacing(6)
-        color_row.addWidget(QLabel("Цвет"))
+        color_row.addWidget(QLabel("Окраска"))
         self.audio_color_combo = QComboBox()
         self.audio_color_combo.addItems(["MiniMeters", "Радужный", "Статичный"])
         color_row.addWidget(self.audio_color_combo, 1)
@@ -1207,6 +1232,7 @@ class MainWindow(QMainWindow):
                 widget.toggled.connect(self._audio_settings_changed)
             elif isinstance(widget, QSlider):
                 widget.valueChanged.connect(self._audio_settings_changed)
+        self.audio_color_combo.currentIndexChanged.connect(self._update_effect_params)
         self.audio_widget.setVisible(False)
 
     # -- Settings dialog ---------------------------------------------------
@@ -1537,13 +1563,11 @@ class MainWindow(QMainWindow):
             name = kb.MODEL_NAMES.get(model, "неизвестная модель")
             self.status_label.setText(f"Подключено: {name}")
             self.status_label.set_ok(True)
-            self.header.set_status(True, f"Подключено: {name}")
             return True
         except kb.KbError as exc:
             self.keyboard = None
             self.status_label.setText(f"Не подключено ({exc})")
             self.status_label.set_ok(False)
-            self.header.set_status(False, f"Не подключено ({exc})")
             return False
 
     def _rescan(self):
@@ -1576,7 +1600,6 @@ class MainWindow(QMainWindow):
     def _restyle_all(self):
         for name in self.key_buttons:
             self._apply_style(name)
-        self._update_stats()
 
     def _on_key_clicked(self, btn):
         if self.keyboard is None:
@@ -1597,7 +1620,6 @@ class MainWindow(QMainWindow):
         self._stop_effect()
         self.painted[name] = self.current_color
         self._apply_style(name)
-        self._update_stats()
         self._send()
 
     def _clear_key(self, btn):
@@ -1606,7 +1628,6 @@ class MainWindow(QMainWindow):
         self.painted.pop(name, None)
         self.selected.discard(name)
         self._apply_style(name)
-        self._update_stats()
         self._send()
 
     def _toggle_selection(self, name):
@@ -1615,7 +1636,6 @@ class MainWindow(QMainWindow):
         else:
             self.selected.add(name)
         self._apply_style(name)
-        self._update_stats()
 
     def _set_selection_mode(self, checked):
         self.selection_mode = checked
@@ -1643,7 +1663,6 @@ class MainWindow(QMainWindow):
         for name in self.selected:
             self.painted[name] = self.current_color
             self._apply_style(name)
-        self._update_stats()
         self._send()
 
     def _clear_all(self):
@@ -2064,7 +2083,7 @@ class MainWindow(QMainWindow):
             self._last_tick = None
             self._sparkle_keys.clear()
             self._snake_path = None
-        self._update_stats()
+        self._update_effect_params()
 
     def _start_effect(self):
         if self.keyboard is None:

@@ -262,22 +262,17 @@ class SpectrumWidget(QWidget):
 
 
 class HeaderBar(QWidget):
-    """Slim instrument header: brand, connection state and armed colour."""
+    """Slim instrument header: brand and the armed colour."""
 
     def __init__(self, tokens, parent=None):
         super().__init__(parent)
         self._t = tokens
-        self._status = (None, "поиск устройства...")
         self._color = None
         self.setFixedHeight(42)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
 
     def set_tokens(self, tokens):
         self._t = tokens
-        self.update()
-
-    def set_status(self, ok, text):
-        self._status = (ok, text)
         self.update()
 
     def set_color(self, rgb):
@@ -344,37 +339,6 @@ class HeaderBar(QWidget):
                                 color_rect.width() - 24, color_rect.height()),
                          int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
                          hex_text)
-
-        right = color_rect.left() - 8
-
-        ok, text = self._status
-        status_font = self._font(["Inter", "Segoe UI"], 10)
-        status_fm = QFontMetrics(status_font)
-        available = max(40, int(right - 190 - 38))
-        text = status_fm.elidedText(text, Qt.TextElideMode.ElideRight, available)
-        sw = 12 + 6 + status_fm.horizontalAdvance(text) + 12
-        status_rect = QRectF(right - sw, 10, sw, 22)
-        painter.setPen(QPen(qcolor(self._t["glass_border"]), 1))
-        painter.setBrush(qcolor(self._t["glass_fill"]))
-        painter.drawRoundedRect(status_rect, 11, 11)
-
-        if ok is True:
-            dot_color = qcolor(self._t["ok"])
-        elif ok is False:
-            dot_color = qcolor(self._t["danger"])
-        else:
-            dot_color = qcolor(self._t["text_muted"])
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(dot_color)
-        painter.drawEllipse(QPointF(status_rect.left() + 12, status_rect.center().y()),
-                            3.5, 3.5)
-
-        painter.setPen(qcolor(self._t["text_dim"]))
-        painter.setFont(status_font)
-        painter.drawText(QRectF(status_rect.left() + 20, status_rect.top(),
-                                status_rect.width() - 24, status_rect.height()),
-                         int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-                         text)
 
 
 class StatusBar(QWidget):

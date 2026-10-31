@@ -129,7 +129,7 @@ QToolButton { background-color: $btn_bg; border: 1px solid $glass_border; border
 QToolButton:hover { background-color: $btn_hover_bg; border-color: $accent; }
 QToolButton::menu-indicator { image: none; }
 
-QSlider::groove:horizontal { background: $scroll_bg; height: 4px; border-radius: 2px; }
+QSlider::groove:horizontal { background: $input_border; height: 4px; border-radius: 2px; }
 QSlider::sub-page:horizontal { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 $accent_dim, stop:1 $accent); border-radius: 2px; }
 QSlider::handle:horizontal { background: #FFFFFF; border: 2px solid $accent; width: 12px; height: 12px; margin: -5px 0; border-radius: 8px; }
 QSlider::handle:horizontal:hover { border-color: $accent_hi; }
@@ -182,10 +182,7 @@ QPushButton#Preset { padding: 5px 8px; font-size: 11px; }
 
 QLabel#GroupTitle { color: $text_muted; font-size: 10px; font-weight: 700; }
 QLabel#MonoValue { color: $text_dim; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; }
-QLabel#StatValue { color: $text; font-family: "Cascadia Mono", "Consolas", monospace; font-size: 20px; font-weight: 700; }
-QLabel#StatText { color: $text_dim; font-size: 13px; font-weight: 600; }
 QFrame#Divider { background-color: $glass_border; border: none; max-height: 1px; }
-QFrame#VDivider { background-color: $glass_border; border: none; max-width: 1px; }
 """)
 
 
