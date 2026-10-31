@@ -9,6 +9,8 @@ widget means every translucent panel above it composites correctly.
 from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import (
     QColor,
+    QFont,
+    QFontMetrics,
     QLinearGradient,
     QPainter,
     QPen,
@@ -65,7 +67,7 @@ class AuroraBackground(QWidget):
         p.fillRect(0, 0, w, h, grad)
 
         diag = (w * w + h * h) ** 0.5
-        base_alpha = 80 if self._t.get("name") == "dark" else 120
+        base_alpha = 44 if self._t.get("name") == "dark" else 90
         for fx, fy, fr, key in _GLOWS:
             col = qcolor(self._t[key])
             col.setAlpha(base_alpha)
@@ -78,9 +80,9 @@ class AuroraBackground(QWidget):
             p.fillRect(0, 0, w, h, rg)
 
         grid = qcolor(self._t["glass_highlight"])
-        grid.setAlpha(10)
+        grid.setAlpha(6)
         p.setPen(grid)
-        step = 44
+        step = 48
         for x in range(0, w, step):
             p.drawLine(x, 0, x, h)
         for y in range(0, h, step):
@@ -96,24 +98,45 @@ class KeyboardCanvas(QWidget):
     def __init__(self, tokens, parent=None):
         super().__init__(parent)
         self._t = tokens
+        self._ambient = None
 
     def set_tokens(self, tokens):
         self._t = tokens
+        self.update()
+
+    def set_ambient(self, rgb):
+        """Tint the halo under the plate with the armed LED colour."""
+        self._ambient = tuple(rgb) if rgb else None
         self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         rect = QRectF(38, 8, self.width() - 76, self.height() - 24)
-        glow = qcolor(self._t["accent"])
-        glow.setAlpha(26)
-        rg = QRadialGradient(rect.center(), max(1.0, rect.width() * 0.55))
-        rg.setColorAt(0.0, glow)
-        edge = QColor(0, 0, 0, 0)
-        rg.setColorAt(1.0, edge)
+
+        base = QColor(*self._ambient) if self._ambient else qcolor(self._t["accent"])
+        halo = QColor(base)
+        halo.setAlpha(52)
+        rg = QRadialGradient(rect.center(), max(1.0, rect.width() * 0.62))
+        rg.setColorAt(0.0, halo)
+        rg.setColorAt(1.0, QColor(base.red(), base.green(), base.blue(), 0))
         painter.fillRect(self.rect(), rg)
-        draw_glass(painter, rect, 18, self._t,
+
+        core = QColor(base)
+        core.setAlpha(36)
+        rg2 = QRadialGradient(rect.center(), max(1.0, rect.width() * 0.34))
+        rg2.setColorAt(0.0, core)
+        rg2.setColorAt(1.0, QColor(base.red(), base.green(), base.blue(), 0))
+        painter.fillRect(self.rect(), rg2)
+
+        draw_glass(painter, rect, 16, self._t,
                    fill=self._t["glass_fill"], highlight=True)
+
+        edge = qcolor(self._t["glass_highlight"])
+        edge.setAlpha(38)
+        painter.setPen(QPen(edge, 1))
+        painter.drawLine(QPointF(rect.left() + 14, rect.top() + 0.5),
+                         QPointF(rect.right() - 14, rect.top() + 0.5))
 
 
 class GlassPanel(QWidget):
@@ -238,6 +261,122 @@ class SpectrumWidget(QWidget):
             painter.drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()))
 
 
+class HeaderBar(QWidget):
+    """Slim instrument header: brand, connection state and armed colour."""
+
+    def __init__(self, tokens, parent=None):
+        super().__init__(parent)
+        self._t = tokens
+        self._status = (None, "поиск устройства...")
+        self._color = None
+        self.setFixedHeight(42)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+
+    def set_tokens(self, tokens):
+        self._t = tokens
+        self.update()
+
+    def set_status(self, ok, text):
+        self._status = (ok, text)
+        self.update()
+
+    def set_color(self, rgb):
+        self._color = tuple(rgb) if rgb else None
+        self.update()
+
+    def _font(self, families, size, bold=False, spacing=0.0):
+        font = QFont()
+        font.setFamilies(families)
+        font.setPixelSize(size)
+        font.setBold(bold)
+        if spacing:
+            font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, spacing)
+        return font
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        w, h = self.width(), self.height()
+
+        painter.setPen(QPen(qcolor(self._t["glass_border"]), 1))
+        painter.drawLine(0, h - 1, w, h - 1)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(qcolor(self._t["accent"]))
+        painter.drawRoundedRect(QRectF(16, 14, 3, 14), 1.5, 1.5)
+
+        painter.setPen(qcolor(self._t["text"]))
+        painter.setFont(self._font(["Inter", "Segoe UI"], 12, True, 2.2))
+        painter.drawText(QRectF(28, 6, 300, 18),
+                         int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                         "WAKIZASHI")
+
+        painter.setPen(qcolor(self._t["text_muted"]))
+        painter.setFont(self._font(["Inter", "Segoe UI"], 8, True, 1.6))
+        painter.drawText(QRectF(28, 23, 300, 14),
+                         int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                         "RGB PAINT")
+
+        right = w - 14.0
+
+        mono = self._font(["Cascadia Mono", "Consolas", "Segoe UI"], 10)
+        mono_fm = QFontMetrics(mono)
+        hex_text = "#%02X%02X%02X" % self._color if self._color else "—"
+        cw = 20 + mono_fm.horizontalAdvance(hex_text) + 12
+        color_rect = QRectF(right - cw, 10, cw, 22)
+        painter.setPen(QPen(qcolor(self._t["glass_border"]), 1))
+        painter.setBrush(qcolor(self._t["glass_fill_strong"]))
+        painter.drawRoundedRect(color_rect, 11, 11)
+
+        dot_c = QPointF(color_rect.left() + 12, color_rect.center().y())
+        if self._color:
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(*self._color))
+            painter.drawEllipse(dot_c, 4.5, 4.5)
+        else:
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(qcolor(self._t["text_muted"]), 1.2))
+            painter.drawEllipse(dot_c, 4.0, 4.0)
+
+        painter.setPen(qcolor(self._t["text_dim"]))
+        painter.setFont(mono)
+        painter.drawText(QRectF(color_rect.left() + 20, color_rect.top(),
+                                color_rect.width() - 24, color_rect.height()),
+                         int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                         hex_text)
+
+        right = color_rect.left() - 8
+
+        ok, text = self._status
+        status_font = self._font(["Inter", "Segoe UI"], 10)
+        status_fm = QFontMetrics(status_font)
+        available = max(40, int(right - 190 - 38))
+        text = status_fm.elidedText(text, Qt.TextElideMode.ElideRight, available)
+        sw = 12 + 6 + status_fm.horizontalAdvance(text) + 12
+        status_rect = QRectF(right - sw, 10, sw, 22)
+        painter.setPen(QPen(qcolor(self._t["glass_border"]), 1))
+        painter.setBrush(qcolor(self._t["glass_fill"]))
+        painter.drawRoundedRect(status_rect, 11, 11)
+
+        if ok is True:
+            dot_color = qcolor(self._t["ok"])
+        elif ok is False:
+            dot_color = qcolor(self._t["danger"])
+        else:
+            dot_color = qcolor(self._t["text_muted"])
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(dot_color)
+        painter.drawEllipse(QPointF(status_rect.left() + 12, status_rect.center().y()),
+                            3.5, 3.5)
+
+        painter.setPen(qcolor(self._t["text_dim"]))
+        painter.setFont(status_font)
+        painter.drawText(QRectF(status_rect.left() + 20, status_rect.top(),
+                                status_rect.width() - 24, status_rect.height()),
+                         int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                         text)
+
+
 class StatusBar(QWidget):
     """Glass status strip with a connection indicator dot and a text label."""
 
@@ -266,7 +405,7 @@ class StatusBar(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         rect = QRectF(6, 3, self.width() - 12, self.height() - 6)
-        draw_glass(painter, rect, 10, self._t, fill=self._t["glass_fill_strong"])
+        draw_glass(painter, rect, 8, self._t, fill=self._t["glass_fill_strong"])
 
         if self._ok is True:
             dot = qcolor(self._t["ok"])
@@ -290,8 +429,11 @@ class StatusBar(QWidget):
         painter.setBrush(dot)
         painter.drawEllipse(QPointF(cx, cy), 4.5, 4.5)
 
-        font = painter.font()
+        font = QFont()
+        font.setFamilies(["Cascadia Mono", "Consolas", "Segoe UI"])
+        font.setPixelSize(11)
         font.setBold(True)
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 0.4)
         painter.setFont(font)
         painter.setPen(qcolor(self._t["text"]))
         text_rect = QRectF(38, 0, self.width() - 48, self.height())

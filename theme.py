@@ -18,38 +18,39 @@ from PyQt6.QtGui import QColor, QLinearGradient, QPainterPath, QPen
 # --------------------------------------------------------------------------
 DARK = {
     "name": "dark",
-    "bg_base": "#0A0F1C",
-    "grad_top": "#0C1222",
-    "grad_bot": "#06090F",
-    "glow1": "#1D4ED8",
-    "glow2": "#4F46E5",
-    "glow3": "#0EA5E9",
-    "glass_fill": "rgba(255,255,255,0.055)",
-    "glass_fill_strong": "rgba(255,255,255,0.09)",
-    "glass_border": "rgba(255,255,255,0.13)",
-    "glass_highlight": "rgba(255,255,255,0.35)",
-    "panel": "#101728",
-    "text": "#D6DEEB",
-    "text_dim": "#7E8BA3",
-    "text_muted": "#5A6780",
-    "accent": "#4D9EFF",
-    "accent_hi": "#7AB8FF",
-    "accent_dim": "#1D4ED8",
-    "accent_text": "#071018",
+    "bg_base": "#06070B",
+    "grad_top": "#0B0E16",
+    "grad_bot": "#05060A",
+    "glow1": "#123B6B",
+    "glow2": "#0B4F6C",
+    "glow3": "#0E2A47",
+    "glass_fill": "rgba(255,255,255,0.04)",
+    "glass_fill_strong": "rgba(255,255,255,0.07)",
+    "glass_border": "rgba(255,255,255,0.10)",
+    "glass_highlight": "rgba(255,255,255,0.22)",
+    "panel": "#0E1118",
+    "text": "#E7ECF5",
+    "text_dim": "#A6B0C2",
+    "text_muted": "#7C879B",
+    "accent": "#5CC8FF",
+    "accent_hi": "#8FDBFF",
+    "accent_dim": "#1F6E96",
+    "accent_text": "#04121A",
     "danger": "#FF5C7A",
     "ok": "#3BE38B",
-    "btn_bg": "rgba(255,255,255,0.06)",
-    "btn_hover_bg": "rgba(77,158,255,0.18)",
-    "input_bg": "rgba(255,255,255,0.05)",
-    "input_border": "rgba(255,255,255,0.14)",
-    "key_top": "#2A3348",
-    "key_mid": "#202940",
-    "key_bot": "#161D2E",
-    "key_border": "#3A4664",
-    "key_border_bottom": "#10141F",
-    "key_text": "#AEB9CE",
-    "scroll_bg": "rgba(255,255,255,0.04)",
-    "scroll_handle": "rgba(255,255,255,0.18)",
+    "btn_bg": "rgba(255,255,255,0.05)",
+    "btn_hover_bg": "rgba(92,200,255,0.14)",
+    "input_bg": "rgba(255,255,255,0.045)",
+    "input_border": "rgba(255,255,255,0.12)",
+    "tab_active_bg": "rgba(92,200,255,0.14)",
+    "key_top": "#232A36",
+    "key_mid": "#1A202B",
+    "key_bot": "#12161E",
+    "key_border": "#333C4C",
+    "key_border_bottom": "#0A0D12",
+    "key_text": "#B9C3D4",
+    "scroll_bg": "rgba(255,255,255,0.035)",
+    "scroll_handle": "rgba(255,255,255,0.16)",
 }
 
 LIGHT = {
@@ -78,6 +79,7 @@ LIGHT = {
     "btn_hover_bg": "rgba(37,99,235,0.12)",
     "input_bg": "rgba(255,255,255,0.80)",
     "input_border": "rgba(148,163,184,0.50)",
+    "tab_active_bg": "rgba(37,99,235,0.10)",
     "key_top": "#FFFFFF",
     "key_mid": "#EEF2F8",
     "key_bot": "#D9E1EE",
@@ -107,44 +109,45 @@ def qcolor(value):
 # --------------------------------------------------------------------------
 _QSS_TEMPLATE = Template("""
 QMainWindow { background-color: $bg_base; }
-QWidget { color: $text; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 12px; }
+QWidget { color: $text; font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 12px; }
 QToolTip { background-color: $panel; color: $text; border: 1px solid $glass_border; border-radius: 6px; padding: 4px 8px; }
 
-QTabWidget::pane { border: 1px solid $glass_border; border-radius: 14px; background-color: $glass_fill; top: -1px; }
-QTabWidget::tab-bar { left: 6px; }
+QTabWidget::pane { border: 1px solid $glass_border; border-radius: 12px; background-color: $glass_fill; top: -1px; }
+QTabWidget::tab-bar { left: 8px; }
 QTabBar { qproperty-drawBase: 0; background: transparent; }
-QTabBar::tab { background: transparent; border: 1px solid transparent; border-radius: 10px; padding: 7px 18px; margin-right: 4px; color: $text_dim; font-weight: 600; }
-QTabBar::tab:selected { background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 $accent_hi, stop:1 $accent); color: $accent_text; border: 1px solid $accent; }
+QTabBar::tab { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 18px; margin-right: 2px; color: $text_dim; font-weight: 600; }
+QTabBar::tab:selected { background-color: $tab_active_bg; border: 1px solid $accent_dim; color: $accent; }
 QTabBar::tab:hover:!selected { color: $text; background-color: $glass_fill_strong; border: 1px solid $glass_border; }
 
-QPushButton { background-color: $btn_bg; border: 1px solid $glass_border; border-radius: 10px; padding: 6px 16px; color: $text; font-weight: 600; }
+QPushButton { background-color: $btn_bg; border: 1px solid $glass_border; border-radius: 8px; padding: 6px 14px; color: $text; font-weight: 600; }
 QPushButton:hover { background-color: $btn_hover_bg; border-color: $accent; color: $text; }
+QPushButton:focus { border-color: $accent; }
 QPushButton:pressed { background-color: $accent_dim; color: $accent_text; }
 QPushButton:disabled { color: $text_muted; border-color: $glass_border; }
 
-QToolButton { background-color: $btn_bg; border: 1px solid $glass_border; border-radius: 10px; padding: 6px 14px; color: $text; font-weight: 600; }
+QToolButton { background-color: $btn_bg; border: 1px solid $glass_border; border-radius: 8px; padding: 6px 14px; color: $text; font-weight: 600; }
 QToolButton:hover { background-color: $btn_hover_bg; border-color: $accent; }
 QToolButton::menu-indicator { image: none; }
 
-QSlider::groove:horizontal { background: $scroll_bg; height: 6px; border-radius: 3px; }
-QSlider::sub-page:horizontal { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 $accent_dim, stop:1 $accent); border-radius: 3px; }
-QSlider::handle:horizontal { background: #FFFFFF; border: 2px solid $accent; width: 14px; height: 14px; margin: -6px 0; border-radius: 8px; }
+QSlider::groove:horizontal { background: $scroll_bg; height: 4px; border-radius: 2px; }
+QSlider::sub-page:horizontal { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 $accent_dim, stop:1 $accent); border-radius: 2px; }
+QSlider::handle:horizontal { background: #FFFFFF; border: 2px solid $accent; width: 12px; height: 12px; margin: -5px 0; border-radius: 8px; }
 QSlider::handle:horizontal:hover { border-color: $accent_hi; }
 
-QComboBox { background-color: $input_bg; border: 1px solid $input_border; border-radius: 10px; padding: 5px 10px; min-width: 80px; color: $text; }
+QComboBox { background-color: $input_bg; border: 1px solid $input_border; border-radius: 8px; padding: 5px 10px; min-width: 80px; color: $text; }
 QComboBox:hover { border-color: $accent; }
 QComboBox::drop-down { border: none; width: 22px; }
 QComboBox QAbstractItemView { background-color: $panel; border: 1px solid $glass_border; border-radius: 8px; selection-background-color: $btn_hover_bg; selection-color: $accent; outline: none; }
 
-QSpinBox { background-color: $input_bg; border: 1px solid $input_border; border-radius: 10px; padding: 4px 6px; color: $text; }
+QSpinBox { background-color: $input_bg; border: 1px solid $input_border; border-radius: 8px; padding: 4px 6px; color: $text; }
 QSpinBox:hover { border-color: $accent; }
 
 QCheckBox { spacing: 8px; color: $text; }
-QCheckBox::indicator { width: 16px; height: 16px; border: 2px solid $input_border; border-radius: 5px; background-color: $input_bg; }
+QCheckBox::indicator { width: 16px; height: 16px; border: 2px solid $input_border; border-radius: 4px; background-color: $input_bg; }
 QCheckBox::indicator:checked { background-color: $accent; border-color: $accent; }
 QCheckBox::indicator:hover { border-color: $accent; }
 
-QMenu { background-color: $panel; border: 1px solid $glass_border; border-radius: 10px; padding: 5px; }
+QMenu { background-color: $panel; border: 1px solid $glass_border; border-radius: 8px; padding: 5px; }
 QMenu::item { padding: 6px 24px; border-radius: 6px; }
 QMenu::item:selected { background-color: $btn_hover_bg; color: $accent; }
 QMenu::separator { height: 1px; background: $glass_border; margin: 4px 8px; }
@@ -154,12 +157,13 @@ QMessageBox { background-color: $bg_base; }
 QColorDialog { background-color: $bg_base; }
 QDialog { background-color: $bg_base; }
 
-QScrollBar:vertical { background: $scroll_bg; width: 10px; border-radius: 5px; margin: 0; }
-QScrollBar::handle:vertical { background: $scroll_handle; border-radius: 5px; min-height: 30px; }
+QScrollBar:vertical { background: $scroll_bg; width: 8px; border-radius: 4px; margin: 0; }
+QScrollBar::handle:vertical { background: $scroll_handle; border-radius: 4px; min-height: 30px; }
 QScrollBar::handle:vertical:hover { background: $accent; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
-QScrollBar:horizontal { background: $scroll_bg; height: 10px; border-radius: 5px; }
-QScrollBar::handle:horizontal { background: $scroll_handle; border-radius: 5px; min-width: 30px; }
+QScrollBar:horizontal { background: $scroll_bg; height: 8px; border-radius: 4px; }
+QScrollBar::handle:horizontal { background: $scroll_handle; border-radius: 4px; min-width: 30px; }
+QScrollBar::handle:horizontal:hover { background: $accent; }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
 """)
 
@@ -173,34 +177,57 @@ def build_qss(tokens):
 # --------------------------------------------------------------------------
 _KEY_BASE = Template("""
 QPushButton {
-  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 $key_top, stop:0.55 $key_mid, stop:1 $key_bot);
+  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 $key_top, stop:0.52 $key_mid, stop:1 $key_bot);
   border: 1px solid $key_border;
   border-bottom: 3px solid $key_border_bottom;
-  border-radius: 7px;
+  border-radius: 6px;
   color: $key_text;
   font-size: 9px;
   font-weight: 600;
-  padding-top: 1px;
+  padding: 0px 0px 1px 0px;
 }
 QPushButton:hover {
-  border: 1px solid $accent;
-  border-bottom: 3px solid $accent_dim;
+  border-color: $accent;
+  border-bottom-color: $accent_dim;
+  color: $text;
+}
+QPushButton:pressed {
+  background-color: $key_bot;
+  border-bottom-width: 1px;
+  padding-top: 2px;
   color: $text;
 }
 """)
 
 _KEY_PAINTED = Template("""
 QPushButton {
-  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba($hr,$hg,$hb,0.95), stop:0.55 rgba($r,$g,$b,0.82), stop:1 rgba($r,$g,$b,0.50));
+  background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba($hr,$hg,$hb,0.98), stop:0.52 rgba($r,$g,$b,0.90), stop:1 rgba($rd,$gd,$bd,0.85));
   border: $border;
-  border-bottom: 3px solid rgb($rd,$gd,$bd);
-  border-radius: 7px;
-  color: #FFFFFF;
+  border-bottom: 3px solid $bottom;
+  border-radius: 6px;
+  color: $fg;
   font-size: 9px;
   font-weight: 700;
-  padding-top: 1px;
+  padding: 0px 0px 1px 0px;
+}
+QPushButton:hover {
+  border-color: rgba(255,255,255,0.90);
+}
+QPushButton:pressed {
+  border-bottom-width: 1px;
+  padding-top: 2px;
 }
 """)
+
+
+def _keycap_fg(r, g, b):
+    """Readable label colour for a key painted with an arbitrary RGB value."""
+    def channel(v):
+        c = v / 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    lum = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    return "#0A0D12" if lum > 0.179 else "#FFFFFF"
 
 
 def keycap_base_qss(tokens):
@@ -210,9 +237,15 @@ def keycap_base_qss(tokens):
 def keycap_qss(tokens, r, g, b, selected=False):
     hr, hg, hb = min(255, r + 80), min(255, g + 80), min(255, b + 80)
     rd, gd, bd = max(0, r - 80), max(0, g - 80), max(0, b - 80)
-    border = f"2px solid {tokens['accent']}" if selected else f"1px solid rgb({r},{g},{b})"
+    if selected:
+        border = f"2px solid {tokens['accent']}"
+        bottom = tokens["accent_dim"]
+    else:
+        border = f"1px solid rgba({hr},{hg},{hb},0.90)"
+        bottom = f"rgb({rd},{gd},{bd})"
     return _KEY_PAINTED.substitute(hr=hr, hg=hg, hb=hb, r=r, g=g, b=b,
-                                   rd=rd, gd=gd, bd=bd, border=border)
+                                   rd=rd, gd=gd, bd=bd, border=border,
+                                   bottom=bottom, fg=_keycap_fg(r, g, b))
 
 
 def swatch_qss(r, g, b, active=False, accent="#4D9EFF"):

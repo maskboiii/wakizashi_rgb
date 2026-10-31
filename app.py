@@ -44,6 +44,7 @@ from theme import DARK, LIGHT, build_qss, keycap_base_qss, keycap_qss, swatch_qs
 from widgets import (
     AuroraBackground,
     GlassPanel,
+    HeaderBar,
     KeyboardCanvas,
     SpectrumWidget,
     StatusBar,
@@ -69,10 +70,11 @@ def _new_grabber():
 # Layout constants
 # --------------------------------------------------------------------------
 WINDOW_W = 800          # width of the keyboard canvas / main window
+HEADER_H = 42          # slim brand / status strip above the keyboard
 KEYBOARD_H = 300        # height of the keyboard canvas
 TABS_H = 280           # default height for the tab widget
 STATUS_H = 28           # status strip below the tabs
-WINDOW_H = KEYBOARD_H + TABS_H + STATUS_H
+WINDOW_H = HEADER_H + KEYBOARD_H + TABS_H + STATUS_H
 X_OFFSET = 42            # horizontal centering shift for the key grid
 
 # Application-wide stylesheet, key styles and design tokens now live in
@@ -693,6 +695,7 @@ class MainWindow(QMainWindow):
 
         self.settings_dialog = self._build_settings_dialog()
         self._load_settings()
+        self._apply_dark_titlebar(self._tokens.get("name") == "dark")
 
     # -- UI -------------------------------------------------------------
     def _build_ui(self):
@@ -701,6 +704,9 @@ class MainWindow(QMainWindow):
         outer = QVBoxLayout(self.aurora)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
+
+        self.header = HeaderBar(self._tokens, self.aurora)
+        outer.addWidget(self.header)
 
         self.background = KeyboardCanvas(self._tokens, self.aurora)
         self.background.setFixedSize(WINDOW_W, KEYBOARD_H)
@@ -1292,6 +1298,7 @@ class MainWindow(QMainWindow):
         self._tokens = tokens
         QApplication.instance().setStyleSheet(build_qss(tokens))
         self.aurora.set_tokens(tokens)
+        self.header.set_tokens(tokens)
         self.background.set_tokens(tokens)
         self.status_label.set_tokens(tokens)
         self._settings_panel.set_tokens(tokens)
@@ -1300,7 +1307,21 @@ class MainWindow(QMainWindow):
     def _apply_theme(self, index):
         self._set_tokens(DARK if index == 0 else LIGHT)
         self._restyle_all()
+        self._apply_dark_titlebar(index == 0)
         self._save_settings()
+
+    def _apply_dark_titlebar(self, dark):
+        """Match the Windows title bar to the dark Command Deck shell."""
+        try:
+            hwnd = int(self.winId())
+            value = ctypes.c_int(1 if dark else 0)
+            for attr in (20, 19):
+                result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                    hwnd, attr, ctypes.byref(value), ctypes.sizeof(value))
+                if result == 0:
+                    break
+        except (AttributeError, OSError):
+            pass
 
     def _read_autostart_registry(self):
         try:
@@ -1365,11 +1386,13 @@ class MainWindow(QMainWindow):
             name = kb.MODEL_NAMES.get(model, "неизвестная модель")
             self.status_label.setText(f"Подключено: {name}")
             self.status_label.set_ok(True)
+            self.header.set_status(True, f"Подключено: {name}")
             return True
         except kb.KbError as exc:
             self.keyboard = None
             self.status_label.setText(f"Не подключено ({exc})")
             self.status_label.set_ok(False)
+            self.header.set_status(False, f"Не подключено ({exc})")
             return False
 
     def _rescan(self):
@@ -1472,6 +1495,8 @@ class MainWindow(QMainWindow):
         self.painted.clear()
         self.selected.clear()
         self._restyle_all()
+        self.header.set_color(None)
+        self.background.set_ambient(None)
         if self.keyboard is not None:
             try:
                 self.keyboard.set_per_key({})
@@ -1491,6 +1516,8 @@ class MainWindow(QMainWindow):
             self.painted[key] = color
         self.current_color = color
         self.swatch.setStyleSheet(self._swatch_style(*color, active=True))
+        self.header.set_color(color)
+        self.background.set_ambient(color)
         self._restyle_all()
         self._send()
 
@@ -1510,6 +1537,8 @@ class MainWindow(QMainWindow):
     def _arm_color(self, r, g, b):
         self.current_color = (r, g, b)
         self.swatch.setStyleSheet(self._swatch_style(r, g, b, active=True))
+        self.header.set_color(self.current_color)
+        self.background.set_ambient(self.current_color)
         for btn, color in self.palette_buttons:
             btn.setStyleSheet(self._swatch_style(*color, active=color == self.current_color))
         if self.selection_mode and self.selected:
