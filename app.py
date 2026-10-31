@@ -662,9 +662,8 @@ class MainWindow(QMainWindow):
 
         self.keyboard = None
         self.painted = {}          # key_name -> (r, g, b)
-        self.selected = set()      # key_names framed in the selection mode
+        self.selected = set()      # key_names framed for batch painting
         self.current_color = None  # armed palette colour
-        self.selection_mode = False
         self.key_buttons = {}
         self.palette_buttons = []
         self.led_pos = {}          # led_index -> (center_x, center_y)
@@ -823,7 +822,7 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(self.dock)
         layout.setContentsMargins(16, 8, 16, 8)
         layout.setSpacing(10)
-        hint = QLabel("ЛКМ — покрасить · ПКМ — очистить · «Выделение» — рамка и пакетная заливка")
+        hint = QLabel("ЛКМ — выделить · ПКМ — очистить · перетаскивание — рамка")
         hint.setStyleSheet(f"color: {self._tokens['text_muted']}; font-size: 11px;")
         layout.addWidget(hint, 1)
         clear = QPushButton("Очистить всё")
@@ -936,9 +935,9 @@ class MainWindow(QMainWindow):
 
         v.addWidget(self._divider())
         v.addWidget(self._group_title("ВЫДЕЛЕНИЕ"))
-        self.sel_check = QCheckBox("Режим выделения")
-        self.sel_check.toggled.connect(self._set_selection_mode)
-        v.addWidget(self.sel_check)
+        note = QLabel("Клик по клавише добавляет её в выделение")
+        note.setStyleSheet(f"color: {self._tokens['text_muted']}; font-size: 11px;")
+        v.addWidget(note)
 
         row = QHBoxLayout()
         row.setSpacing(6)
@@ -1603,25 +1602,8 @@ class MainWindow(QMainWindow):
             self._apply_style(name)
 
     def _on_key_clicked(self, btn):
-        if self.keyboard is None:
-            self.status_label.setText("Не подключено")
-            return
         name = btn.property("key_name")
-        if self.selection_mode:
-            self._toggle_selection(name)
-            return
-        if self.current_color is None:
-            color = self._pick_color()
-            if color is None:
-                return
-            self._arm_color(*color)
-        self._paint_single(name)
-
-    def _paint_single(self, name):
-        self._stop_effect()
-        self.painted[name] = self.current_color
-        self._apply_style(name)
-        self._send()
+        self._toggle_selection(name)
 
     def _clear_key(self, btn):
         """Right-click: turn the key off and revert its button style."""
@@ -1637,11 +1619,6 @@ class MainWindow(QMainWindow):
         else:
             self.selected.add(name)
         self._apply_style(name)
-
-    def _set_selection_mode(self, checked):
-        self.selection_mode = checked
-        if not checked:
-            self._deselect_all()
 
     def _select_all(self):
         self.selected = set(self.key_buttons.keys())
@@ -1659,7 +1636,7 @@ class MainWindow(QMainWindow):
             color = self._pick_color()
             if color is None:
                 return
-            self._arm_color(*color)
+            self._arm_color(*color, apply=False)
         self._stop_effect()
         for name in self.selected:
             self.painted[name] = self.current_color
@@ -1715,7 +1692,7 @@ class MainWindow(QMainWindow):
         if color is not None:
             self._arm_color(*color)
 
-    def _arm_color(self, r, g, b):
+    def _arm_color(self, r, g, b, apply=True):
         self.current_color = (r, g, b)
         self.swatch.setStyleSheet(self._swatch_style(r, g, b, active=True))
         self.hex_label.setText("#%02X%02X%02X" % (r, g, b))
@@ -1723,7 +1700,7 @@ class MainWindow(QMainWindow):
         self.background.set_ambient(self.current_color)
         for btn, color in self.palette_buttons:
             btn.setStyleSheet(self._swatch_style(*color, active=color == self.current_color))
-        if self.selection_mode and self.selected:
+        if apply and self.selected:
             self._apply_to_selection()
 
     # -- Sending ---------------------------------------------------------
@@ -2453,7 +2430,7 @@ class MainWindow(QMainWindow):
         self.close()
 
     def eventFilter(self, obj, event):
-        if obj is self.background and self.selection_mode:
+        if obj is self.background:
             etype = event.type()
             if etype == event.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
                 self._sel_origin = event.pos()
