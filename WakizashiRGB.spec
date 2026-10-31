@@ -40,7 +40,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='WakizashiRGB_v1.9.1',
+    name='WakizashiRGB_v1.9.2',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
