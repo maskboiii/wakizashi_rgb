@@ -1253,7 +1253,7 @@ class MainWindow(QMainWindow):
         reset_row.addStretch(1)
         form.addLayout(reset_row)
 
-        about = QLabel("Wakizashi RGB · v1.7\nПодсветка клавиатуры SinoWealth (AULA F87 Pro и совместимые)")
+        about = QLabel("Wakizashi RGB · v1.8\nПодсветка клавиатуры SinoWealth (AULA F87 Pro и совместимые)")
         about.setStyleSheet(f"color: {self._tokens['text_muted']}; font-size: 11px;")
         form.addWidget(about)
 
